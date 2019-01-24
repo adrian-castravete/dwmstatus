@@ -12,6 +12,7 @@
 #include <strings.h>
 #include <sys/time.h>
 #include <time.h>
+#include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -78,17 +79,6 @@ setstatus(char *str)
 {
 	XStoreName(dpy, DefaultRootWindow(dpy), str);
 	XSync(dpy, False);
-}
-
-char *
-loadavg(void)
-{
-	double avgs[3];
-
-	if (getloadavg(avgs, 3) < 0)
-		return smprintf("");
-
-	return smprintf("%.2f %.2f %.2f", avgs[0], avgs[1], avgs[2]);
 }
 
 char *
@@ -160,7 +150,7 @@ getbattery(char *base)
 	if (remcap < 0 || descap < 0)
 		return smprintf("invalid");
 
-	return smprintf("%.0f%%%c", ((float)remcap / (float)descap) * 100, status);
+	return smprintf(" %.0f%%%c", ((float)remcap / (float)descap) * 100, status);
 }
 
 char *
@@ -171,45 +161,74 @@ gettemperature(char *base, char *sensor)
 	co = readfile(base, sensor);
 	if (co == NULL)
 		return smprintf("");
-	return smprintf("%02.0f°C", atof(co) / 1000);
+	return smprintf(" %02.0f°C", atof(co) / 1000);
+}
+
+char *
+batteries()
+{
+	char *b0 = getbattery("/sys/class/power_supply/BAT0");
+	char *b1 = getbattery("/sys/class/power_supply/BAT1");
+	char *status = smprintf("B:%s%s", b0, b1);
+	free(b0);
+	free(b1);
+
+	return status;
+}
+
+char *
+temperatures()
+{
+	char *t0 = gettemperature("/sys/devices/virtual/hwmon/hwmon0", "temp1_input");
+	char *t1 = gettemperature("/sys/devices/virtual/hwmon/hwmon2", "temp1_input");
+	char *t2 = gettemperature("/sys/devices/virtual/hwmon/hwmon4", "temp1_input");
+	char *status = smprintf("T:%s%s%s", t0, t1, t2);
+	free(t0);
+	free(t1);
+	free(t2);
+
+	return status;
 }
 
 int
 main(void)
 {
 	char *status;
-	char *avgs;
-	char *bat;
-	char *bat1;
-	char *tmro;
-	char *t0, *t1, *t2;
+	char *datetime;
+	char *stats;
+	int i, c;
+	struct sysinfo s;
 
 	if (!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
 		return 1;
 	}
 
-	for (;;sleep(1)) {
-		avgs = loadavg();
-		bat = getbattery("/sys/class/power_supply/BAT0");
-		bat1 = getbattery("/sys/class/power_supply/BAT1");
-		tmro = mktimes("%Y-%m-%d %H:%M %a", tzro);
-		t0 = gettemperature("/sys/devices/virtual/hwmon/hwmon0", "temp1_input");
-		t1 = gettemperature("/sys/devices/virtual/hwmon/hwmon2", "temp1_input");
-		t2 = gettemperature("/sys/devices/virtual/hwmon/hwmon4", "temp1_input");
-
-		status = smprintf("T:%s|%s|%s L:%s B:%s|%s %s",
-				t0, t1, t2, avgs, bat, bat1, tmro);
+	for (c=0, i=0; ; i+=1, sleep(1)) {
+		sysinfo(&s);
+		switch (c%6) {
+		case 0: datetime = mktimes("%Y-%m-%d", tzro); break;
+		default: datetime = mktimes("%H:%M %a", tzro); break;
+		}
+		switch (c%5) {
+		case 0:
+			stats = smprintf("L: %.2f %.2f %.2f", s.loads[0] / 65536.0, s.loads[1] / 65536.0, s.loads[2] / 65536.0);
+			break;
+		case 1:
+			stats = smprintf("M: %d%%", (int) ((s.freeram + s.bufferram) / (float) s.totalram * 100));
+			break;
+		case 2:
+			stats = smprintf("S: %d%%", (int) ((1 - ((float)s.freeswap) / s.totalswap) * 100));
+			break;
+		case 3: stats = batteries(); break;
+		case 4: stats = temperatures(); break;
+		}
+		status = smprintf("[ %s | %s ]", stats, datetime);
+		free(stats);
+		free(datetime);
 		setstatus(status);
-
-		free(t0);
-		free(t1);
-		free(t2);
-		free(avgs);
-		free(bat);
-		free(bat1);
-		free(tmro);
 		free(status);
+		if (i%5 == 0) c+=1;
 	}
 
 	XCloseDisplay(dpy);
