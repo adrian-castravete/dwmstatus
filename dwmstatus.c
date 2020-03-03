@@ -180,12 +180,16 @@ char *
 temperatures()
 {
 	char *t0 = gettemperature("/sys/class/hwmon/hwmon0", "temp1_input");
-	char *t1 = gettemperature("/sys/class/hwmon/hwmon2", "temp1_input");
-	char *t2 = gettemperature("/sys/class/hwmon/hwmon4", "temp1_input");
-	char *status = smprintf("T:%s%s%s", t0, t1, t2);
+	char *t1 = gettemperature("/sys/class/hwmon/hwmon1", "temp1_input");
+	char *t2 = gettemperature("/sys/class/hwmon/hwmon2", "temp1_input");
+	char *t3 = gettemperature("/sys/class/hwmon/hwmon3", "temp1_input");
+	char *t4 = gettemperature("/sys/class/hwmon/hwmon4", "temp1_input");
+	char *status = smprintf("T:%s%s%s%s%s", t0, t1, t2, t3, t4);
 	free(t0);
 	free(t1);
 	free(t2);
+	free(t3);
+	free(t4);
 
 	return status;
 }
@@ -195,8 +199,11 @@ main(void)
 {
 	char *status;
 	char *datetime;
-	char *stats;
-	int i, c;
+	char *loads;
+	char *mems;
+	char *swap;
+	char *bats;
+	char *temps;
 	struct sysinfo s;
 
 	if (!(dpy = XOpenDisplay(NULL))) {
@@ -204,31 +211,24 @@ main(void)
 		return 1;
 	}
 
-	for (c=0, i=0; ; i+=1, sleep(1)) {
+	while (1) {
 		sysinfo(&s);
-		switch (c%6) {
-		case 0: datetime = mktimes("%Y-%m-%d", tzro); break;
-		default: datetime = mktimes("%H:%M %a", tzro); break;
-		}
-		switch (c%5) {
-		case 0:
-			stats = smprintf("L: %.2f %.2f %.2f", s.loads[0] / 65536.0, s.loads[1] / 65536.0, s.loads[2] / 65536.0);
-			break;
-		case 1:
-			stats = smprintf("M: %d%%", (int) ((s.freeram + s.bufferram) / (float) s.totalram * 100));
-			break;
-		case 2:
-			stats = smprintf("S: %d%%", (int) ((1 - ((float)s.freeswap) / s.totalswap) * 100));
-			break;
-		case 3: stats = batteries(); break;
-		case 4: stats = temperatures(); break;
-		}
-		status = smprintf("[ %s | %s ]", stats, datetime);
-		free(stats);
+		datetime = mktimes("%Y-%m-%d %H:%M %a", tzro);
+		loads = smprintf("L: %.2f %.2f %.2f", s.loads[0] / 65536.0, s.loads[1] / 65536.0, s.loads[2] / 65536.0);
+		mems = smprintf("M: %d%%", (int) ((1 - (s.freeram + s.bufferram) / (float) s.totalram) * 100));
+		swap = smprintf("S: %d%%", (int) ((1 - ((float)s.freeswap) / s.totalswap) * 100));
+		bats = batteries();
+		temps = temperatures();
+		status = smprintf("%s | %s | %s | %s | %s | %s", bats, temps, swap, mems, loads, datetime);
+		free(temps);
+		free(bats);
+		free(swap);
+		free(mems);
+		free(loads);
 		free(datetime);
 		setstatus(status);
 		free(status);
-		if (i%5 == 0) c+=1;
+		sleep(1);
 	}
 
 	XCloseDisplay(dpy);
