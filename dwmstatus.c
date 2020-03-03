@@ -179,9 +179,9 @@ batteries()
 char *
 temperatures()
 {
-	char *t0 = gettemperature("/sys/devices/virtual/hwmon/hwmon0", "temp1_input");
-	char *t1 = gettemperature("/sys/devices/virtual/hwmon/hwmon2", "temp1_input");
-	char *t2 = gettemperature("/sys/devices/virtual/hwmon/hwmon4", "temp1_input");
+	char *t0 = gettemperature("/sys/class/hwmon/hwmon0", "temp1_input");
+	char *t1 = gettemperature("/sys/class/hwmon/hwmon2", "temp1_input");
+	char *t2 = gettemperature("/sys/class/hwmon/hwmon4", "temp1_input");
 	char *status = smprintf("T:%s%s%s", t0, t1, t2);
 	free(t0);
 	free(t1);
